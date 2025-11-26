@@ -1,0 +1,35 @@
+name: Destroy GKE Cluster
+
+on:
+  workflow_dispatch:
+    inputs:
+      GoogleProjectId:
+        description: 'GCP Project ID (leave empty to use saved secret)'
+        required: false
+        type: string
+      GoogleServiceAccountEmail:
+        description: 'Service Account Email (leave empty to use saved secret)'
+        required: false
+        type: string
+      GooglePrivateKey:
+        description: 'Service Account Private Key (leave empty to use saved secret)'
+        required: false
+        type: string
+
+jobs:
+  destroy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Destroy GKE Cluster
+        env:
+          GOOGLE_PROJECT_ID: ${{ github.event.inputs.GoogleProjectId || secrets.GOOGLE_PROJECT_ID }}
+          GOOGLE_SERVICE_ACCOUNT_EMAIL: ${{ github.event.inputs.GoogleServiceAccountEmail || secrets.GOOGLE_SERVICE_ACCOUNT_EMAIL }}
+          GOOGLE_PRIVATE_KEY: ${{ github.event.inputs.GooglePrivateKey || secrets.GOOGLE_PRIVATE_KEY }}
+        run: |
+          cd gcp
+          chmod +x destroy.sh
+          ./destroy.sh
