@@ -1,0 +1,35 @@
+name: Deploy AKS Cluster
+
+on:
+  workflow_dispatch:
+    inputs:
+      AzureClientId:
+        description: 'Azure Service Principal Client ID (leave empty to use saved secret)'
+        required: false
+        type: string
+      AzureClientSecret:
+        description: 'Azure Service Principal Client Secret (leave empty to use saved secret)'
+        required: false
+        type: string
+      AzureTenantId:
+        description: 'Azure Tenant ID (leave empty to use saved secret)'
+        required: false
+        type: string
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Deploy AKS Cluster
+        env:
+          AZURE_CLIENT_ID: ${{ github.event.inputs.AzureClientId || secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ github.event.inputs.AzureClientSecret || secrets.AZURE_CLIENT_SECRET }}
+          AZURE_TENANT_ID: ${{ github.event.inputs.AzureTenantId || secrets.AZURE_TENANT_ID }}
+        run: |
+          cd azure
+          chmod +x start.sh
+          ./start.sh
