@@ -8,10 +8,32 @@ tfenv install 1.2.5
 tfenv use 1.2.5
 
 user=$(aws sts get-caller-identity --query Arn --output text | cut -d '/' -f 2)
-sed -i "s/CUSTOM-USERNAME/$user/" terraform/nodes.tf 
+sed -i "s/CUSTOM-USERNAME/$user/" terraform/nodes.tf
+
+# Create S3 bucket for Terraform state
+echo "Creating S3 bucket for Terraform state..."
+AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+BUCKET_NAME="eks-tfstate-${AWS_ACCOUNT_ID}"
+REGION="us-east-1"
+
+echo "Bucket name: $BUCKET_NAME"
+
+# Check if bucket exists
+if ! aws s3api head-bucket --bucket "$BUCKET_NAME" 2>/dev/null; then
+    echo "Creating S3 bucket $BUCKET_NAME..."
+    aws s3api create-bucket --bucket "$BUCKET_NAME" --region "$REGION"
+
+    # Enable versioning
+    aws s3api put-bucket-versioning --bucket "$BUCKET_NAME" --versioning-configuration Status=Enabled
+    echo "Bucket created and versioning enabled."
+else
+    echo "Bucket $BUCKET_NAME already exists."
+fi
 
 cd terraform/
-terraform init
+terraform init \
+    -backend-config="bucket=$BUCKET_NAME" \
+    -backend-config="region=$REGION"
 terraform plan
 terraform apply -auto-approve
 

@@ -1,3 +1,14 @@
+terraform {
+  required_version = ">= 1.2.0"
+
+  backend "s3" {
+    # Bucket name and region provided via -backend-config
+    # Example: terraform init -backend-config="bucket=eks-tfstate-123456789012" -backend-config="region=us-east-1"
+    key     = "terraform/state/eks.tfstate"
+    encrypt = true
+  }
+}
+
 variable "aws_region" {
   type    = string
   default = "us-east-1"

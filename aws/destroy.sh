@@ -31,7 +31,14 @@ echo ""
 echo "Step 3: Destroying EKS cluster using Terraform..."
 cd terraform/
 
-terraform init
+# Generate S3 bucket name (must match start.sh)
+AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+BUCKET_NAME="eks-tfstate-${AWS_ACCOUNT_ID}"
+REGION="${AWS_DEFAULT_REGION:-us-east-1}"
+
+terraform init \
+    -backend-config="bucket=$BUCKET_NAME" \
+    -backend-config="region=$REGION"
 echo ""
 echo "WARNING: This will destroy all resources created by Terraform!"
 echo ""
