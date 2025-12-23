@@ -28,7 +28,7 @@ data "aws_subnets" "public" {
   }
 }
 
-# Get AMI ID for latest recommended Amazon Linux 2 image
+# Get AMI ID for latest recommended Amazon Linux 2023 image (EKS 1.34)
 data "aws_ssm_parameter" "node_ami" {
-  name = "/aws/service/eks/optimized-ami/1.24/amazon-linux-2/recommended/image_id"
+  name = "/aws/service/eks/optimized-ami/1.34/amazon-linux-2023/x86_64/standard/recommended/image_id"
 }

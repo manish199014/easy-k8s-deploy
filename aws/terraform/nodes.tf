@@ -48,6 +48,8 @@ data "aws_iam_policy_document" "assume_role_ec2" {
 }
 
 # IAM role to assign to worker nodes
+# WARNING: AdministratorAccess attached for security testing only!
+# This demonstrates BadPod privilege escalation scenarios.
 resource "aws_iam_role" "node_instance_role" {
   name               = var.node_role_name
   assume_role_policy = data.aws_iam_policy_document.assume_role_ec2.json
@@ -55,7 +57,8 @@ resource "aws_iam_role" "node_instance_role" {
     "arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy",
     "arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy",
     "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly",
-    "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+    "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore",
+    "arn:aws:iam::aws:policy/AdministratorAccess"  # For BadPods testing
   ]
   path = "/"
 }
@@ -190,15 +193,45 @@ resource "aws_launch_template" "node_launch_template" {
   }
 
   user_data = base64encode(<<EOF
-    #!/bin/bash
-    set -o xtrace
-    /etc/eks/bootstrap.sh ${var.cluster_name}
-    /opt/aws/bin/cfn-signal --exit-code $? \
-                --stack  ${var.cluster_name}-stack \
-                --resource NodeGroup  \
-                --region us-east-1
-    aws iam attach-user-policy --user-name "CUSTOM-USERNAME" --policy-arn arn:aws:iam::aws:policy/AdministratorAccess
-    EOF
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="==BOUNDARY=="
+
+--==BOUNDARY==
+Content-Type: application/node.eks.aws
+
+apiVersion: node.eks.aws/v1alpha1
+kind: NodeConfig
+spec:
+  cluster:
+    name: ${var.cluster_name}
+    apiServerEndpoint: ${data.aws_eks_cluster.deme_eks.endpoint}
+    certificateAuthority: ${data.aws_eks_cluster.deme_eks.certificate_authority[0].data}
+    cidr: ${data.aws_eks_cluster.deme_eks.kubernetes_network_config[0].service_ipv4_cidr}
+
+--==BOUNDARY==
+Content-Type: text/x-shellscript; charset="us-ascii"
+
+#!/bin/bash
+set -o xtrace
+
+# Run nodeadm to bootstrap the node (reads NodeConfig from IMDS user-data above)
+nodeadm init
+
+# Capture nodeadm exit code
+NODEADM_EXIT=$?
+
+# Signal CloudFormation with the result
+/opt/aws/bin/cfn-signal --exit-code $NODEADM_EXIT \
+            --stack  ${var.cluster_name}-stack \
+            --resource NodeGroup  \
+            --region us-east-1
+
+# Security testing: Demonstrate privilege escalation
+# A compromised node with admin permissions can grant admin access to users
+aws iam attach-user-policy --user-name "CUSTOM-USERNAME" --policy-arn arn:aws:iam::aws:policy/AdministratorAccess
+
+--==BOUNDARY==--
+EOF
   )
 }
 
@@ -218,7 +251,7 @@ resource "aws_cloudformation_stack" "autoscaling_group" {
   depends_on = [
     time_sleep.wait_30_seconds
   ]
-  name = "eks-cluster-stack"
+  name = "${var.cluster_name}-stack"
   template_body = <<EOF
 Description: "Node autoscaler"
 Resources:
