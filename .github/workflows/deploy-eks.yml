@@ -1,16 +1,13 @@
-name: Deploy EKS Cluster
+name: Deploy EKS Cluster (OIDC)
 
 on:
   workflow_dispatch:
-    inputs:
-      AwsAccessKey:
-        description: 'AWS Access Key (leave empty to use saved secret)'
-        required: false
-        type: string
-      AwsSecretKey:
-        description: 'AWS Secret Access Key (leave empty to use saved secret)'
-        required: false
-        type: string
+    # Inputs for keys are removed as they are no longer needed.
+
+# Permission required to request the OIDC token from GitHub
+permissions:
+  id-token: write
+  contents: read
 
 jobs:
   deploy:
@@ -20,19 +17,20 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Mask sensitive inputs
-        if: github.event.inputs.AwsAccessKey != ''
-        run: |
-          AWS_ACCESS_KEY_ID=$(cat $GITHUB_EVENT_PATH | jq -r '.inputs.AwsAccessKey')
-          echo "::add-mask::$AWS_ACCESS_KEY_ID"
-          AWS_SECRET_ACCESS_KEY=$(cat $GITHUB_EVENT_PATH | jq -r '.inputs.AwsSecretKey')
-          echo "::add-mask::$AWS_SECRET_ACCESS_KEY"
+      # Replaces manual credential setting. 
+      # This action exchanges the GitHub OIDC token for temporary AWS credentials.
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          # The ARN of the IAM Role you created in AWS to trust this repo
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }} 
+          aws-region: us-east-1
+          role-session-name: GitHubActionsEKSDeploy
 
       - name: Deploy EKS Cluster
-        env:
-          AWS_ACCESS_KEY_ID: ${{ github.event.inputs.AwsAccessKey || secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ github.event.inputs.AwsSecretKey || secrets.AWS_SECRET_ACCESS_KEY }}
-          AWS_DEFAULT_REGION: us-east-1
+        # The configure-aws-credentials action automatically sets the 
+        # AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, and AWS_SESSION_TOKEN
+        # environment variables for this step.
         run: |
           cd aws
           chmod +x start.sh
