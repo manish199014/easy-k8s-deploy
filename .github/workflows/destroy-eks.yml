@@ -1,16 +1,13 @@
-name: Destroy EKS Cluster
+name: Destroy EKS Cluster (OIDC)
 
 on:
   workflow_dispatch:
-    inputs:
-      AwsAccessKey:
-        description: 'AWS Access Key (leave empty to use saved secret)'
-        required: false
-        type: string
-      AwsSecretKey:
-        description: 'AWS Secret Access Key (leave empty to use saved secret)'
-        required: false
-        type: string
+    # Inputs for Access/Secret Keys are removed as we now use OIDC.
+
+# These permissions are required for the OIDC token exchange
+permissions:
+  id-token: write
+  contents: read
 
 jobs:
   destroy:
@@ -20,19 +17,19 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Mask sensitive inputs
-        if: github.event.inputs.AwsAccessKey != ''
-        run: |
-          AWS_ACCESS_KEY_ID=$(cat $GITHUB_EVENT_PATH | jq -r '.inputs.AwsAccessKey')
-          echo "::add-mask::$AWS_ACCESS_KEY_ID"
-          AWS_SECRET_ACCESS_KEY=$(cat $GITHUB_EVENT_PATH | jq -r '.inputs.AwsSecretKey')
-          echo "::add-mask::$AWS_SECRET_ACCESS_KEY"
+      # Configure AWS Credentials using OIDC
+      # This replaces the manual environment variable setup for keys
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          # The ARN of the IAM Role you created in AWS to trust this repo
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }} 
+          aws-region: us-east-1
+          role-session-name: GitHubActionsEKSDestroy
 
       - name: Destroy EKS Cluster
-        env:
-          AWS_ACCESS_KEY_ID: ${{ github.event.inputs.AwsAccessKey || secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ github.event.inputs.AwsSecretKey || secrets.AWS_SECRET_ACCESS_KEY }}
-          AWS_DEFAULT_REGION: us-east-1
+        # The environment variables AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, 
+        # and AWS_SESSION_TOKEN are automatically set by the previous step.
         run: |
           cd aws
           chmod +x destroy.sh
